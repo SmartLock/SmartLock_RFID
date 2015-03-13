@@ -386,7 +386,13 @@ void failed() {
 
 ///////////////////////////////////////// Funcao Pisca  ///////////////////////////////////
 
-void piscaStatusLed() {
+void piscaStatusLed(int numero, int tempo) {
 
-
+  for (int i=0; i < numero; i++){
+    digitalWrite(statusLed, HIGH); // Turn on Status Led
+     delay(tempo);
+     digitalWrite(statusLed, LOW); // Turn off Status Led
+     delay(tempo);
+  }
+  
 }
