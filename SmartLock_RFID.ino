@@ -30,7 +30,7 @@ byte masterCard[4];   // Stores master card's ID read from EEPROM
 #define RST_PIN 9
 MFRC522 mfrc522(SS_PIN, RST_PIN);	// Create MFRC522 instance.
 
-int tempoAbertura = 40;
+int tempoAbertura = 15;
 int tempoDelayCiclo = 2500;
 int tempoStatusLed = 250;
 
