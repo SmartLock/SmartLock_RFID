@@ -119,7 +119,6 @@ void loop () {
   do {
     successRead = getID(); // sets successRead to 1 when we get read from reader otherwise 0
     if (programMode) {
-      cycleLeds(); // Program Mode cycles through RGB waiting to read a new card
     }
     else {
       normalModeOn(); // Normal mode, blue Power LED is on, all others are off
@@ -131,6 +130,7 @@ void loop () {
       Serial.println("This is Master Card"); 
       Serial.println("Exiting Program Mode");
       Serial.println("-----------------------------");
+      piscaStatusLed(3, tempoStatusLed, tempoStatusLed/2);
       programMode = false;
       return;
     }
@@ -139,6 +139,7 @@ void loop () {
         Serial.println("I know this PICC, so removing");
         deleteID(readCard);
         Serial.println("-----------------------------");
+        piscaStatusLed(2, tempoStatusLed, tempoStatusLed/2);
       }
       else {                    // If scanned card is not known add it
         Serial.println("I do not know this PICC, adding...");
@@ -158,6 +159,7 @@ void loop () {
       Serial.println("");
       Serial.println("Scan a PICC to ADD or REMOVE");
       Serial.println("-----------------------------");
+      piscaStatusLed(1, tempoStatusLed*4, tempoStatusLed);
     }
     else {
       if ( findID(readCard) ) {        // If not, see if the card is in the EEPROM 
@@ -312,12 +314,7 @@ boolean findID( byte find[] ) {
 // Flashes the green LED 5 times to indicate a successful write to EEPROM
 void successWrite() {
  
-  for (int i=0; i < 5; i++){
-    digitalWrite(statusLed, HIGH); // Turn on Status Led
-    delay(tempoStatusLed);
-    digitalWrite(statusLed, LOW); // Turn off Status Led
-    delay(tempoStatusLed);
-  }
+  piscaStatusLed(1, tempoStatusLed, tempoStatusLed/2);
   
   Serial.println("Succesfully added ID record to EEPROM");
 }
@@ -359,7 +356,7 @@ void openDoor( int setDelay ) {
   digitalWrite(relay, LOW); // Relock door
   digitalWrite(statusLed, LOW); // Turn off Status Led
   
-  piscaStatusLed(1,tempoStatusLed); //avisa que o processo funcionou atraves do led
+  piscaStatusLed(1,tempoStatusLed,tempoStatusLed/2); //avisa que o processo funcionou atraves do led
   
   delay(tempoDelayCiclo);
   
@@ -368,7 +365,7 @@ void openDoor( int setDelay ) {
 ///////////////////////////////////////// Failed Access  ///////////////////////////////////
 void failed() {
   
-  piscaStatusLed(3,tempoStatusLed); //avisa que o processo falhou atraves do led
+  piscaStatusLed(3,tempoStatusLed,tempoStatusLed/2); //avisa que o processo falhou atraves do led
  
   delay(tempoDelayCiclo);
   
@@ -376,13 +373,13 @@ void failed() {
 
 ///////////////////////////////////////// Funcao Pisca  ///////////////////////////////////
 
-void piscaStatusLed(int numero, int tempo) {
+void piscaStatusLed(int numero, int tempoLigado, int tempoDesligado) {
 
   for (int i=0; i < numero; i++){
     digitalWrite(statusLed, HIGH); // Turn on Status Led
-     delay(tempo);
+     delay(tempoLigado);
      digitalWrite(statusLed, LOW); // Turn off Status Led
-     delay(tempo);
+     delay(tempoDesligado);
   }
   
 }
