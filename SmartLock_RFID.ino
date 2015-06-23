@@ -109,7 +109,7 @@ void setup() {
     Serial.print(masterCard[i], HEX);
   }
   Serial.println("");
-  Serial.println("Waiting PICCs to bo scanned :)");
+  Serial.println("Waiting PICCs to be scanned :)");
   cycleLeds();    // Everything ready lets give user some feedback by cycling leds
 }
 
@@ -359,12 +359,7 @@ void openDoor( int setDelay ) {
   digitalWrite(relay, LOW); // Relock door
   digitalWrite(statusLed, LOW); // Turn off Status Led
   
-  for (int i=0; i < 2; i++){
-    digitalWrite(statusLed, HIGH); // Turn on Status Led
-    delay(tempoStatusLed);
-    digitalWrite(statusLed, LOW); // Turn off Status Led
-    delay(tempoStatusLed);
-  } 
+  piscaStatusLed(1,tempoStatusLed); //avisa que o processo funcionou atraves do led
   
   delay(tempoDelayCiclo);
   
@@ -373,13 +368,8 @@ void openDoor( int setDelay ) {
 ///////////////////////////////////////// Failed Access  ///////////////////////////////////
 void failed() {
   
-  for (int i=0; i < 3; i++){
-    digitalWrite(statusLed, HIGH); // Turn on Status Led
-    delay(tempoStatusLed);
-    digitalWrite(statusLed, LOW); // Turn off Status Led
-    delay(tempoStatusLed);
-  }
-  
+  piscaStatusLed(3,tempoStatusLed); //avisa que o processo falhou atraves do led
+ 
   delay(tempoDelayCiclo);
   
 }
