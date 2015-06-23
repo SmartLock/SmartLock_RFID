@@ -1,93 +1,79 @@
-#include <EEPROM.h>  // We are going to read and write PICC's UIDs from/to EEPROM
-#include <SPI.h>      // RC522 Module uses SPI protocol
-#include <MFRC522.h>   // Library for Mifare RC522 Devices
+#include <EEPROM.h>  // Biblioteca de memória NÃO-VOLÁTIL para ler/armazenar/deletar IDs
+#include <SPI.h>      // Biblioteca do protocolo SPI (Interface Periférica Serial) para o controlador comunicar com dispositivos periféricos (no caso, o RFID-RC522)
+#include <MFRC522.h>   // Biblioteca para o dispositivo RFID-RC522
 
-#define statusLed 6
-#define relay 8
-#define wipeB 3 // Button pin for WipeMode
+#define statusLed 6 // Define o pino 6 como status do programa por meio de um Led
+#define relay 8 // Define o pino 8 como acionamento do relé
+#define wipeB 3 // Define o pino 3 como botão de reset
 
-boolean match = false; // initialize card match to false
-boolean programMode = false; // initialize programming mode to false
+boolean match = false; // Inicializa a variável match (cartão de partida)
+boolean programMode = false; // Inicializa a variável programMode (Modo de Programação do Cartão Master)
 
-int successRead; // Variable integer to keep if we have Successful Read from Reader
+int successRead; // Declara a variável sucessRead, para informar se houve sucesso na leitura do cartão
 
-byte storedCard[4];   // Stores an ID read from EEPROM
-byte readCard[4];     // Stores scanned ID read from RFID Module
-byte masterCard[4];   // Stores master card's ID read from EEPROM
+byte storedCard[4];   // Declara a variável storedCard, armazena o cartão ID lido na memória EEPROM
+byte readCard[4];     // Declara a variável readCard, que armazena  o cartão ID escaneado no módulo RFID-RC522
+byte masterCard[4];   // Declara a variável byte masterCard, que armazena o cartão ID MASTER lido na memória EEPROM
 
-/* We need to define MFRC522's pins and create instance
- * Pin layout should be as follows (on Arduino Uno):
- * MOSI: Pin 11 / ICSP-4
- * MISO: Pin 12 / ICSP-1
- * SCK : Pin 13 / ICSP-3
- * SS : Pin 10 (Configurable)
- * RST : Pin 9 (Configurable)
- * look MFRC522 Library for
- * pin configuration for other Arduinos.
- */
+#define SS_PIN 10 // Define pino 10 como SS (que liga no SDA do RFID-RC522)
+#define RST_PIN 9 // Define pino 9 como RST (que liga no RST do RFID-RC522)
 
-#define SS_PIN 10
-#define RST_PIN 9
-MFRC522 mfrc522(SS_PIN, RST_PIN);	// Create MFRC522 instance.
+MFRC522 mfrc522(SS_PIN, RST_PIN); 
 
-int tempoAbertura = 15;
-int tempoDelayCiclo = 2500;
-int tempoStatusLed = 250;
+int tempoAbertura = 15; // Declara a variável tempoAbertura, tempo de abertura da porta
+int tempoDelayCiclo = 2500; // Declara a variável tempoDelayCiclo, tempo de espera entre um comando e outro
+int tempoStatusLed = 250; // Declara a variável tempoStatusLed, tempo no qual o Led fica aceso
 
 ///////////////////////////////////////// Setup ///////////////////////////////////
-void setup() {
-  //Arduino Pin Configuration
-  pinMode(statusLed, OUTPUT);
-  pinMode(relay, OUTPUT);
-  digitalWrite(relay, LOW); // Make sure door is locked
-  digitalWrite(statusLed, LOW); // Make sure led is off
-  
-  //Protocol Configuration
-  Serial.begin(9600);	 // Initialize serial communications with PC
-  SPI.begin();           // MFRC522 Hardware uses SPI protocol
-  mfrc522.PCD_Init();    // Initialize MFRC522 Hardware
-  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max); //Set Antenna Gain to Max- this will increase reading distance
 
-  //Wipe Code if Button Pressed while setup run (powered on) it wipes EEPROM
-  pinMode(wipeB, INPUT_PULLUP);  // Enable pin's pull up resistor
-  if (digitalRead(wipeB) == LOW) {     // when button pressed pin should get low, button connected to ground
-    digitalWrite(statusLed, HIGH);   // Red Led stays on to inform user we are going to wipe
-    Serial.println("!!! Wipe Button Pressed !!!");
-    Serial.println("You have 5 seconds to Cancel");
-    Serial.println("This will be remove all records and cannot be undone");
-    delay(5000);    // Give user enough time to cancel operation
-    if (digitalRead(wipeB) == LOW) {  // If button still be pressed, wipe EEPROM
-      Serial.println("!!! Starting Wiping EEPROM !!!");
-      for (int x=0; x<1024; x=x+1){ //Loop end of EEPROM address
-        if (EEPROM.read(x) == 0){ //If EEPROM address 0 
-          // do nothing, already clear, go to the next address in order to save time and reduce writes to EEPROM
+void setup() {
+  
+  // Configuração dos pinos do Arduíno
+  pinMode(statusLed, OUTPUT); // Define o pino como saída
+  pinMode(relay, OUTPUT); // Define o pino como saída
+  
+  digitalWrite(relay, LOW); // Certifica-se que o relé está desligado
+  digitalWrite(statusLed, LOW); // Certifica-se que o Led está desligado
+  
+  // Configuração de Protocolo
+  Serial.begin(9600);	 // Inicializa comunicação serial com o PC
+  SPI.begin();           // Hardware RFID-RC522 usa protocolo SPI
+  mfrc522.PCD_Init();    // Inicializa Hardware RFID-RC522
+  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max); // Configura a antena para ganho máximo. Isso aumenta a distância de leitura
+
+  pinMode(wipeB, INPUT_PULLUP);  // Configura WipeB para conectar a 5V internamente
+  if (digitalRead(wipeB) == LOW) {     // Quando o botão é pressionado, o pino é aterrado
+    digitalWrite(statusLed, HIGH);   // Led sinaliza que usuário irá resetar memória
+    Serial.println("!!! Botao Reset de Memoria Pressionado !!!");
+    Serial.println("Voce tem 5 segundos para cancelar");
+    Serial.println("Esta acao ira remover todos os registros e nao pode ser desfeita");
+    delay(5000);    // Dá ao usuário tempo suficiente para cancelar a operação
+    if (digitalRead(wipeB) == LOW) {  // Se o botão continua pressionado, limpar EEPROM
+      Serial.println("!!! Limpando memoria EEPROM !!!");
+      for (int x=0; x<1024; x=x+1){ //Faz um loop em todos os endereços EEPROM
+        if (EEPROM.read(x) == 0){ // Se EEPROM já estiver zerada, ok
         } 
         else{
-          EEPROM.write(x, 0); // if not write 0, it takes 3.3mS
+          EEPROM.write(x, 0); // Se não, zerar EEPROM (leva 3,3ms)
         }
       }
-      Serial.println("!!! Wiped !!!");
-      digitalWrite(statusLed, LOW); // visualize successful wipe
-      delay(200);
-      digitalWrite(statusLed, HIGH);
-      delay(200);
-      digitalWrite(statusLed, LOW);
-      delay(200);
-      digitalWrite(statusLed, HIGH);
-      delay(200);
-      digitalWrite(statusLed, LOW);
+      Serial.println("!!! Memoria Apagada !!!");
+      
+    piscaStatusLed(5, tempoStatusLed*5, tempoStatusLed);
+    
     }
     else {
-      Serial.println("!!! Wiping Cancelled !!!");
-      digitalWrite(statusLed, LOW);
+      Serial.println("!!! Cancelando.... !!!");
+      
+     piscaStatusLed(2, tempoStatusLed*5, tempoStatusLed);
+     
     }
   }
-  //Check if master card defined, if not let user choose a master card
-  //This also useful to just redefine Master Card
-  //You can keep other EEPROM records just write other than 1 to EEPROM address 1
-  if (EEPROM.read(1) != 1) {  // Look EEPROM if Master Card defined, EEPROM address 1 holds if defined
-    Serial.println("No Master Card Defined");
-    Serial.println("Scan A PICC to Define as Master Card");
+  // Verifica se existe um cartão mestre definido, se não, deixa o usuário escolher o cartão
+  // Também usado para redefinir cartão mestre
+  if (EEPROM.read(1) != 1) { // Verifica se existe um cartão mestre definido
+    Serial.println("Cartao MESTRE nao definido");
+    Serial.println("Cadastre um cartao MESTRE");
     do {
       successRead = getID(); // sets successRead to 1 when we get read from reader otherwise 0
       digitalWrite(statusLed, HIGH); // Visualize Master Card need to be defined
@@ -130,7 +116,7 @@ void loop () {
       Serial.println("This is Master Card"); 
       Serial.println("Exiting Program Mode");
       Serial.println("-----------------------------");
-      piscaStatusLed(3, tempoStatusLed, tempoStatusLed/2);
+      piscaStatusLed(1, tempoStatusLed*5, tempoStatusLed);
       programMode = false;
       return;
     }
@@ -159,7 +145,7 @@ void loop () {
       Serial.println("");
       Serial.println("Scan a PICC to ADD or REMOVE");
       Serial.println("-----------------------------");
-      piscaStatusLed(1, tempoStatusLed*4, tempoStatusLed);
+      piscaStatusLed(1, tempoStatusLed*5, tempoStatusLed);
     }
     else {
       if ( findID(readCard) ) {        // If not, see if the card is in the EEPROM 
