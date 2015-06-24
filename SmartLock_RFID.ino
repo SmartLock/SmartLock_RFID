@@ -43,18 +43,18 @@ void setup() {
 
   pinMode(wipeB, INPUT_PULLUP);  // Configura WipeB para conectar a 5V internamente
   if (digitalRead(wipeB) == LOW) {     // Quando o botão é pressionado, o pino é aterrado
-    digitalWrite(statusLed, HIGH);   // Led sinaliza que usuário irá resetar memória
+    digitalWrite(statusLed, HIGH);   // Led sinaliza que usuário irá resetar a memória
     Serial.println("!!! Botao Reset de Memoria Pressionado !!!");
     Serial.println("Voce tem 5 segundos para cancelar");
     Serial.println("Esta acao ira remover todos os registros e nao pode ser desfeita");
-    delay(5000);    // Dá ao usuário tempo suficiente para cancelar a operação
+    delay(5000);    // Dá ao usuário tempo suficiente para cancelar a operação (5s)
     if (digitalRead(wipeB) == LOW) {  // Se o botão continua pressionado, limpar EEPROM
       Serial.println("!!! Limpando memoria EEPROM !!!");
       for (int x=0; x<1024; x=x+1){ //Faz um loop em todos os endereços EEPROM
         if (EEPROM.read(x) == 0){ // Se EEPROM já estiver zerada, ok
         } 
         else{
-          EEPROM.write(x, 0); // Se não, zerar EEPROM (leva 3,3ms)
+          EEPROM.write(x, 0); // Se não, zerar EEPROM (leva 3.3ms)
         }
       }
       Serial.println("!!! Memoria Apagada !!!");
@@ -71,133 +71,117 @@ void setup() {
   }
   // Verifica se existe um cartão mestre definido, se não, deixa o usuário escolher o cartão
   // Também usado para redefinir cartão mestre
-  if (EEPROM.read(1) != 1) { // Verifica se existe um cartão mestre definido
+  if (EEPROM.read(1) != 1) { // Verifica se existe um cartão mestre definido no começo do programa (o espaço de memória 1 serve para indicar se há ou não cartão mestre definido)
     Serial.println("Cartao MESTRE nao definido");
     Serial.println("Cadastre um cartao MESTRE");
     do {
-      successRead = getID(); // sets successRead to 1 when we get read from reader otherwise 0
-      digitalWrite(statusLed, HIGH); // Visualize Master Card need to be defined
-      delay(200);
-      digitalWrite(statusLed, LOW);
-      delay(200);
+      successRead = getID(); // Altera a variável successRead para 1 quando a leitura for válida, caso contrário assume 0
     }
-    while (!successRead); //the program will not go further while you not get a successful read
-    for ( int j = 0; j < 4; j++ ) { // Loop 4 times
-      EEPROM.write( 2 +j, readCard[j] ); // Write scanned PICC's UID to EEPROM, start from address 3
+    while (!successRead); // O programa não avança enquanto não realiza a leitura corretamente
+    for ( int j = 0; j < 4; j++ ) { // Faz o Loop 4x para escrever na memória PICCs de 4 bytes
+      EEPROM.write( 2 +j, readCard[j] ); // Escreve na memória o cartão escaneado a partir do endereço 2
     }
-    EEPROM.write(1,1); //Write to EEPROM we defined Master Card.
-    Serial.println("Master Card Defined");
+    EEPROM.write(1,1); // Escreve no espaço de memória 1 que houve definição do cartão mestre
+    Serial.println("Cartao Mestre Definido");
   }
-  Serial.println("##### RFID Door Acces Control v2.0.8 #####"); //For debug purposes
-  Serial.println("Master Card's UID");
-  for ( int i = 0; i < 4; i++ ) {     // Read Master Card's UID from EEPROM
-    masterCard[i] = EEPROM.read(2+i); // Write it to masterCard
-    Serial.print(masterCard[i], HEX);
+  Serial.println("##### Projeto SMARTLOCK Versao 1.0 #####"); //For debug purposes
+  Serial.println("UID do Cartao Mestre:");
+  for ( int i = 0; i < 4; i++ ) {     // Lê o cartão mestre da memória
+    masterCard[i] = EEPROM.read(2+i); // A variável masterCard recebe o UID do cartão vindo da memória
+    Serial.print(masterCard[i], HEX); // Mostra na tela o UID
   }
   Serial.println("");
-  Serial.println("Waiting PICCs to be scanned :)");
-  cycleLeds();    // Everything ready lets give user some feedback by cycling leds
+  Serial.println("Esperando cartoess para ser escaneado: ");
+  
+  piscaStatusLed(1, tempoStatusLed*5, tempoStatusLed);
 }
 
-
-///////////////////////////////////////// Main Loop ///////////////////////////////////
+///////////////////////////////////////// Loop Principal ///////////////////////////////////
 void loop () {
   do {
-    successRead = getID(); // sets successRead to 1 when we get read from reader otherwise 0
+    successRead = getID(); // Altera a variável successRead para 1 quando a leitura for válida, caso contrário assume 0
     if (programMode) {
     }
     else {
-      normalModeOn(); // Normal mode, blue Power LED is on, all others are off
+      normalModeOn(); // Garante o estado normal (Led e Relé desligados)
     }
   }
-  while (!successRead); //the program will not go further while you not get a successful read
+  while (!successRead); // O programa não avança enquanto não realiza a leitura corretamente (pela primeira vez, o programa nunca segue o primeiro If, pois o programMode é falso)
   if (programMode) {
-    if ( isMaster(readCard) ) {  //If master card scanned again exit program mode
-      Serial.println("This is Master Card"); 
-      Serial.println("Exiting Program Mode");
+    if ( isMaster(readCard) ) { // Verifica se o cartão escaneado é o cartão mestre, com o Modo de Programação Aberto
+      Serial.println("Voce inseriu o cartao mestre"); 
+      Serial.println("Saindo do Modo de Programacao...");
       Serial.println("-----------------------------");
       piscaStatusLed(1, tempoStatusLed*5, tempoStatusLed);
-      programMode = false;
+      programMode = false; // Sai do Modo de Programação
       return;
     }
     else {	
-      if ( findID(readCard) ) { //If scanned card is known delete it
-        Serial.println("I know this PICC, so removing");
+      if ( findID(readCard) ) { // Se dentro do Modo de Programação, a antena escanear um cartão já cadastrado....
+        Serial.println("Eu conheco esse cartao, portanto irei BLOQUEA-LO");
         deleteID(readCard);
         Serial.println("-----------------------------");
         piscaStatusLed(2, tempoStatusLed, tempoStatusLed/2);
       }
-      else {                    // If scanned card is not known add it
-        Serial.println("I do not know this PICC, adding...");
+      else {                    // Se dentro do Modo de Programação, a antena escanear um cartão já não cadastrado....
+        Serial.println("Eu nao conheco esse cartao, portanto irei LIBERA-LO");
         writeID(readCard);
         Serial.println("-----------------------------");
+        piscaStatusLed(4, tempoStatusLed, tempoStatusLed/2);
       }
     }
   }
   else {
-    if ( isMaster(readCard) ) {  // If scanned card's ID matches Master Card's ID enter program mode
+    if ( isMaster(readCard) ) {  // Se o cartão escaneado combina com o cartão mestre, entra no Modo de Programação
       programMode = true;
-      Serial.println("Hello Master - Entered Program Mode");
-      int count = EEPROM.read(0); // Read the first Byte of EEPROM that
-      Serial.print("I have ");    // stores the number of ID's in EEPROM
+      Serial.println("Ola Master - Voce entrou no Modo de Programacao");
+      int count = EEPROM.read(0); // Conta e armazena quantos cartoes tem acesso a fechadura
+      Serial.print("Eu tenho ");
       Serial.print(count);
-      Serial.print(" record(s) on EEPROM");
+      Serial.print(" cartoes com acesso a essa fechadura");
       Serial.println("");
-      Serial.println("Scan a PICC to ADD or REMOVE");
+      Serial.println("Insira um cartao para LIBERAR OU BLOQUEAR o acesso");
       Serial.println("-----------------------------");
       piscaStatusLed(1, tempoStatusLed*5, tempoStatusLed);
     }
     else {
-      if ( findID(readCard) ) {        // If not, see if the card is in the EEPROM 
-        Serial.println("Welcome, You shall pass");
-        openDoor(300);                // Open the door lock for 300 ms
+      if ( findID(readCard) ) {        // Libera acesso ao usuario, caso o cartao esteja cadastrado
+        Serial.println("Bem-Vindo!");
+        openDoor(tempoAbertura);                // Abre a porta
       }
-      else {				// If not, show that the ID was not valid
-        Serial.println("You shall not pass");
-        failed(); 
+      else {				// Nega acesso ao usuario, caso o cartao não esteja cadastrado
+        Serial.println("O cartao inserido NAO tem acesso!");
+        failed(); // Sinaliza por meio do Led que não foi possível abrir a fechadura
       }
     }
   }
 }
 
-///////////////////////////////////////// Get PICC's UID ///////////////////////////////////
+///////////////////////////////////////// Obtendo UID dos cartões /////////////////////////////////
 int getID() {
-  // Getting ready for Reading PICCs
-  if ( ! mfrc522.PICC_IsNewCardPresent()) { //If a new PICC placed to RFID reader continue
+  // Se preparando para ler cartões
+  if ( ! mfrc522.PICC_IsNewCardPresent()) { // Se um cartão foi posicionado corretamente no RFID, continue
     return 0;
   }
-  if ( ! mfrc522.PICC_ReadCardSerial()) { //Since a PICC placed get Serial and continue
+  if ( ! mfrc522.PICC_ReadCardSerial()) { // Se o programa conseguiu obter o serial do cartão, continue
     return 0;
   }
-  // There are Mifare PICCs which have 4 byte or 7 byte UID care if you use 7 byte PICC
-  // I think we should assume every PICC as they have 4 byte UID
-  // Until we support 7 byte PICCs
-  Serial.println("Scanned PICC's UID:");
+  
+  // Assumindo que os cartões possuem 4 byte
+    Serial.println("UID do cartao escaneado:");
   for (int i = 0; i < 4; i++) {  // 
     readCard[i] = mfrc522.uid.uidByte[i];
     Serial.print(readCard[i], HEX);
   }
   Serial.println("");
-  mfrc522.PICC_HaltA(); // Stop reading
-  return 1;
+  mfrc522.PICC_HaltA(); // Para de ler
+  return 1; // Retorna 1 para informar que o cartão foi lido corretamente
 }
 
-///////////////////////////////////////// Cycle Leds (Program Mode) ///////////////////////////////////
-void cycleLeds() {
- 
-  for (int i=0; i < 4; i++){
-    digitalWrite(statusLed, HIGH); // Turn on Status Led
-    delay(tempoStatusLed);
-    digitalWrite(statusLed, LOW); // Turn off Status Led
-    delay(tempoStatusLed);
-  }
-  
-}
-
-//////////////////////////////////////// Normal Mode Led  ///////////////////////////////////
+//////////////////////////////////////// Led - Estado Normal ///////////////////////////////////
 void normalModeOn () {
-  digitalWrite(statusLed, LOW); // Blue LED ON and ready to read card
-  digitalWrite(relay, LOW); // Make sure Door is Locked
+  digitalWrite(statusLed, LOW); // Led Desligado
+  digitalWrite(relay, LOW); // Relé Desligado
 }
 
 //////////////////////////////////////// Read an ID from EEPROM //////////////////////////////
@@ -325,8 +309,7 @@ void successDelete() {
   Serial.println("Succesfully removed ID record from EEPROM");
 }
 
-////////////////////// Check readCard IF is masterCard   ///////////////////////////////////
-// Check to see if the ID passed is the master programing card
+////////////////////// Verifica se o cartão lido é o cartão mestre   ///////////////////////////////////
 boolean isMaster( byte test[] ) {
   if ( checkTwo( test, masterCard ) )
     return true;
@@ -334,24 +317,24 @@ boolean isMaster( byte test[] ) {
     return false;
 }
 
-///////////////////////////////////////// Unlock Door   ///////////////////////////////////
+///////////////////////////////////////// Abre a porta  ///////////////////////////////////
 void openDoor( int setDelay ) {
   
-  digitalWrite(relay, HIGH); // Unlock door!
-  delay(tempoAbertura); // Hold door lock open for given seconds
-  digitalWrite(relay, LOW); // Relock door
-  digitalWrite(statusLed, LOW); // Turn off Status Led
+  digitalWrite(relay, HIGH); // Abre a porta
+  delay(setDelay); // O sinal de abertura permanece por mais algum tempo, para garantir que a porta foi aberta
+  digitalWrite(relay, LOW); // Interrompe o sinal de abertura (necessário somente um pulso)
+  digitalWrite(statusLed, LOW); // Desliga o Led
   
-  piscaStatusLed(1,tempoStatusLed,tempoStatusLed/2); //avisa que o processo funcionou atraves do led
+  piscaStatusLed(1,tempoStatusLed,tempoStatusLed/2); // Avisa que o processo funcionou atraves do led
   
   delay(tempoDelayCiclo);
   
 }
 
-///////////////////////////////////////// Failed Access  ///////////////////////////////////
+///////////////////////////////////////// Acesso Negado  ///////////////////////////////////
 void failed() {
   
-  piscaStatusLed(3,tempoStatusLed,tempoStatusLed/2); //avisa que o processo falhou atraves do led
+  piscaStatusLed(3,tempoStatusLed,tempoStatusLed/2); // Avisa que o processo falhou atraves do led
  
   delay(tempoDelayCiclo);
   
@@ -362,9 +345,9 @@ void failed() {
 void piscaStatusLed(int numero, int tempoLigado, int tempoDesligado) {
 
   for (int i=0; i < numero; i++){
-    digitalWrite(statusLed, HIGH); // Turn on Status Led
+    digitalWrite(statusLed, HIGH); // Acende o Led
      delay(tempoLigado);
-     digitalWrite(statusLed, LOW); // Turn off Status Led
+     digitalWrite(statusLed, LOW); // Apaga o Led
      delay(tempoDesligado);
   }
   
