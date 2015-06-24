@@ -6,7 +6,7 @@
 #define relay 8 // Define o pino 8 como acionamento do relé
 #define wipeB 3 // Define o pino 3 como botão de reset
 
-boolean match = false; // Inicializa a variável match (cartão de partida)
+boolean match = false; // Inicializa a variável match (comparação)
 boolean programMode = false; // Inicializa a variável programMode (Modo de Programação do Cartão Master)
 
 int successRead; // Declara a variável sucessRead, para informar se houve sucesso na leitura do cartão
@@ -65,7 +65,7 @@ void setup() {
     else {
       Serial.println("!!! Cancelando.... !!!");
       
-     piscaStatusLed(2, tempoStatusLed*5, tempoStatusLed);
+    piscaStatusLed(2, tempoStatusLed*5, tempoStatusLed);
      
     }
   }
@@ -91,7 +91,7 @@ void setup() {
     Serial.print(masterCard[i], HEX); // Mostra na tela o UID
   }
   Serial.println("");
-  Serial.println("Esperando cartoess para ser escaneado: ");
+  Serial.println("Esperando cartoes para ser escaneado...");
   
   piscaStatusLed(1, tempoStatusLed*5, tempoStatusLed);
 }
@@ -184,11 +184,11 @@ void normalModeOn () {
   digitalWrite(relay, LOW); // Relé Desligado
 }
 
-//////////////////////////////////////// Read an ID from EEPROM //////////////////////////////
+//////////////////////////////////////// Lê o cartão UID da memória EEPROM //////////////////////////////
 void readID( int number ) {
-  int start = (number * 4 ) + 2; // Figure out starting position
-  for ( int i = 0; i < 4; i++ ) { // Loop 4 times to get the 4 Bytes
-    storedCard[i] = EEPROM.read(start+i); // Assign values read from EEPROM to array
+  int start = (number * 4 ) + 2; // Descobre qual posição está o cartão
+  for ( int i = 0; i < 4; i++ ) { // Realiza o loop 4x para pegar os 4 byte do cartão
+    storedCard[i] = EEPROM.read(start+i); // Armazena o valor lido na variável storedCard
   }
 }
 
@@ -209,84 +209,75 @@ void writeID( byte a[] ) {
   }
 }
 
-///////////////////////////////////////// Remove ID from EEPROM   ///////////////////////////////////
+///////////////////////////////////////// Deleta cartão UID da memória EEPROM   ///////////////////////////////////
 void deleteID( byte a[] ) {
-  if ( !findID( a ) ) { // Before we delete from the EEPROM, check to see if we have this card!
-    failedWrite(); // If not
-  }
-  else {
-    int num = EEPROM.read(0); // Get the numer of used spaces, position 0 stores the number of ID cards
+
+    int num = EEPROM.read(0); // A variável num assume a quantidade de cartões cadastrados
     int slot; // Figure out the slot number of the card
-    int start;// = ( num * 4 ) + 6; // Figure out where the next slot starts
-    int looping; // The number of times the loop repeats
+    int start;// = ( num * 4 ) + 6; // Descobre onde começa o próximo slot de cada cartão na memória 
+    int looping; // O número de loops que o for realiza
     int j;
-    int count = EEPROM.read(0); // Read the first Byte of EEPROM that stores number of cards
-    slot = findIDSLOT( a ); //Figure out the slot number of the card to delete
+    int count = EEPROM.read(0); // A variável count assume a quantidade de cartões cadastrados
+    slot = findIDSLOT( a ); // Descobre o número do slot do cartão a ser deletado
     start = (slot * 4) + 2;
     looping = ((num - slot) * 4);
-    num--; // Decrement the counter by one
-    EEPROM.write( 0, num ); // Write the new count to the counter
+    num--; // Decrementa - 1 (retirou um cartão)
+    EEPROM.write( 0, num ); // Escreve na posição de memória 0 a quantidade de cartões atualizada
     for ( j = 0; j < looping; j++ ) { // Loop the card shift times
-      EEPROM.write( start+j, EEPROM.read(start+4+j)); // Shift the array values to 4 places earlier in the EEPROM
+      EEPROM.write( start+j, EEPROM.read(start+4+j)); // Descola os valores do próximo cartão para o cartão deletado
     }
-    for ( int k = 0; k < 4; k++ ) { //Shifting loop
+    for ( int k = 0; k < 4; k++ ) { // Agora, apaga o cartão deslocado para que ele não fique duplicado
       EEPROM.write( start+j+k, 0);
     }
     successDelete();
   }
-}
 
-///////////////////////////////////////// Check Bytes   ///////////////////////////////////
+///////////////////////////////////////// Compara os bytes  ///////////////////////////////////
 boolean checkTwo ( byte a[], byte b[] ) {
-  if ( a[0] != NULL ) // Make sure there is something in the array first
-    match = true; // Assume they match at first
-  for ( int k = 0; k < 4; k++ ) { // Loop 4 times
-    if ( a[k] != b[k] ) // IF a != b then set match = false, one fails, all fail
+  if ( a[0] != NULL ) // Certifica-se que o primeiro array não está vazio
+    match = true; // Assume-se que eles são iguais a princípio
+  for ( int k = 0; k < 4; k++ ) { // Faz o loop 4x
+    if ( a[k] != b[k] ) // Se um byte não é semelhante na comparação, ele retorna falso
       match = false;
   }
-  if ( match ) { // Check to see if if match is still true
-    return true; // Return true
+  if ( match ) { // Verifica se a variável match ainda é verdadeira, se sim retorna verdadeiro, se não retorna falso
+    return true;
   }
   else  {
-    return false; // Return false
+    return false;
   }
 }
 
-///////////////////////////////////////// Find Slot   ///////////////////////////////////
+///////////////////////////////////////// Encontrar SLOT  ///////////////////////////////////
 int findIDSLOT( byte find[] ) {
-  int count = EEPROM.read(0); // Read the first Byte of EEPROM that
-  for ( int i = 1; i <= count; i++ ) { // Loop once for each EEPROM entry
-    readID(i); // Read an ID from EEPROM, it is stored in storedCard[4]
-    if( checkTwo( find, storedCard ) ) { // Check to see if the storedCard read from EEPROM
-      // is the same as the find[] ID card passed
-      return i; // The slot number of the card
-      break; // Stop looking we found it
+  int count = EEPROM.read(0); // Conta a quantidade de cartões cadastrados
+  for ( int i = 1; i <= count; i++ ) { // Loop  até a quantidade de cartões
+    readID(i); // Lê o da memória EEPROM
+    if( checkTwo( find, storedCard ) ) { // Verifica se o storedCard lido da EEPROM é o mesmo do cartão lido pela antena
+      return i; // Retorna o SLOT do cartão
+      break; // Para a operação
     }
   }
 }
 
-///////////////////////////////////////// Find ID From EEPROM   ///////////////////////////////////
+///////////////////////////////////////// Encontrar cartão UID na memória EEPROM   ///////////////////////////////////
 boolean findID( byte find[] ) {
-  int count = EEPROM.read(0); // Read the first Byte of EEPROM that
-  for ( int i = 1; i <= count; i++ ) {  // Loop once for each EEPROM entry
-    readID(i); // Read an ID from EEPROM, it is stored in storedCard[4]
-    if( checkTwo( find, storedCard ) ) {  // Check to see if the storedCard read from EEPROM
+  int count = EEPROM.read(0); // Conta quantos cartões estão cadastrados
+  for ( int i = 1; i <= count; i++ ) {  // Entra no loop, sendo o limite a quantidade de cartões previamente cadastrados
+    readID(i); // Chama a função de ler os cartões, passando como parâmetro a contagem dos cartões
+    if( checkTwo( find, storedCard ) ) {  // Compara se o cartão lido existe na memória por meio da variável find (cartão lido) com storedCard (cartão armazenado)
       return true;
-      break; // Stop looking we found it
+      break; // Se encontrou, retornar verdadeiro e interrompe a função
     }
-    else {  // If not, return false   
+    else {  // Se não encontrou, retorna falso  
     }
   }
   return false;
 }
 
-///////////////////////////////////////// Write Success to EEPROM   ///////////////////////////////////
-// Flashes the green LED 5 times to indicate a successful write to EEPROM
+///////////////////////////////////////// Notificação da adição do cartão  ///////////////////////////////////
 void successWrite() {
- 
-  piscaStatusLed(1, tempoStatusLed, tempoStatusLed/2);
-  
-  Serial.println("Succesfully added ID record to EEPROM");
+  Serial.println("Cartao UID cadastrado com sucesso da EEPROM");
 }
 
 ///////////////////////////////////////// Write Failed to EEPROM   ///////////////////////////////////
@@ -303,10 +294,9 @@ void failedWrite() {
   Serial.println("Failed! There is something wrong with ID or bad EEPROM");
 }
 
-///////////////////////////////////////// Success Remove UID From EEPROM  ///////////////////////////////////
-// Flashes the blue LED 3 times to indicate a success delete to EEPROM
+///////////////////////////////////////// Notificação da remoção do cartão ///////////////////////////////////
 void successDelete() {
-  Serial.println("Succesfully removed ID record from EEPROM");
+  Serial.println("Cartao UID removido com sucesso da EEPROM"); 
 }
 
 ////////////////////// Verifica se o cartão lido é o cartão mestre   ///////////////////////////////////
