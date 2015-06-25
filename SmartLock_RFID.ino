@@ -1,16 +1,20 @@
 #include <EEPROM.h>  // Biblioteca de memória NÃO-VOLÁTIL para ler/armazenar/deletar IDs
 #include <SPI.h>      // Biblioteca do protocolo SPI (Interface Periférica Serial) para o controlador comunicar com dispositivos periféricos (no caso, o RFID-RC522)
 #include <MFRC522.h>   // Biblioteca para o dispositivo RFID-RC522
+#include <Servo.h> // Biblioteca do servo motor
 
 #define statusLed 6 // Define o pino 6 como status do programa por meio de um Led
 #define relay 8 // Define o pino 8 como acionamento do relé
 #define wipeB 3 // Define o pino 3 como botão de reset
 
-boolean match = false; // Inicializa a variável match (comparação)
-boolean programMode = false; // Inicializa a variável programMode (Modo de Programação do Cartão Master)
+boolean match = false; // Inicializa a variável match (comparação) como falso
+boolean programMode = false; // Inicializa a variável programMode (Modo de Programação do Cartão Master) como falso
+
+Servo servol; // Define a variável do servo motor
 
 int successRead; // Declara a variável sucessRead, para informar se houve sucesso na leitura do cartão
 
+// Os cartões possuem 4 bytes
 byte storedCard[4];   // Declara a variável storedCard, armazena o cartão ID lido na memória EEPROM
 byte readCard[4];     // Declara a variável readCard, que armazena  o cartão ID escaneado no módulo RFID-RC522
 byte masterCard[4];   // Declara a variável byte masterCard, que armazena o cartão ID MASTER lido na memória EEPROM
@@ -43,7 +47,6 @@ void setup() {
 
   pinMode(wipeB, INPUT_PULLUP);  // Configura WipeB para conectar a 5V internamente
   if (digitalRead(wipeB) == LOW) {     // Quando o botão é pressionado, o pino é aterrado
-    digitalWrite(statusLed, HIGH);   // Led sinaliza que usuário irá resetar a memória
     Serial.println("!!! Botao Reset de Memoria Pressionado !!!");
     Serial.println("Voce tem 5 segundos para cancelar");
     Serial.println("Esta acao ira remover todos os registros e nao pode ser desfeita");
@@ -59,13 +62,13 @@ void setup() {
       }
       Serial.println("!!! Memoria Apagada !!!");
       
-    piscaStatusLed(5, tempoStatusLed*5, tempoStatusLed);
+    piscaStatusLed(20, tempoStatusLed/10, tempoStatusLed/10);
     
     }
     else {
       Serial.println("!!! Cancelando.... !!!");
       
-    piscaStatusLed(2, tempoStatusLed*5, tempoStatusLed);
+    piscaStatusLed(2, tempoStatusLed/2, tempoStatusLed/2);
      
     }
   }
@@ -91,9 +94,9 @@ void setup() {
     Serial.print(masterCard[i], HEX); // Mostra na tela o UID
   }
   Serial.println("");
-  Serial.println("Esperando cartoes para ser escaneado...");
+  Serial.println("Esperando cartoes para serem escaneado...");
   
-  piscaStatusLed(1, tempoStatusLed*5, tempoStatusLed);
+  piscaStatusLed(3, tempoStatusLed*2, tempoStatusLed*2);
 }
 
 ///////////////////////////////////////// Loop Principal ///////////////////////////////////
@@ -148,6 +151,7 @@ void loop () {
       if ( findID(readCard) ) {        // Libera acesso ao usuario, caso o cartao esteja cadastrado
         Serial.println("Bem-Vindo!");
         openDoor(tempoAbertura);                // Abre a porta
+        servoControl(); // Aciona o servo motor
       }
       else {				// Nega acesso ao usuario, caso o cartao não esteja cadastrado
         Serial.println("O cartao inserido NAO tem acesso!");
@@ -167,7 +171,7 @@ int getID() {
     return 0;
   }
   
-  // Assumindo que os cartões possuem 4 byte
+  // Assumindo que os cartões possuem 4 bytes
     Serial.println("UID do cartao escaneado:");
   for (int i = 0; i < 4; i++) {  // 
     readCard[i] = mfrc522.uid.uidByte[i];
@@ -192,19 +196,19 @@ void readID( int number ) {
   }
 }
 
-///////////////////////////////////////// Add ID to EEPROM   ///////////////////////////////////
+///////////////////////////////////////// Adiciona cartão UID na memória EEPROM //////////////////////////////////
 void writeID( byte a[] ) {
-  if ( !findID( a ) ) { // Before we write to the EEPROM, check to see if we have seen this card before!
+    if ( !findID( a ) ) { // Verifica se já existe este cartão na memória
     int num = EEPROM.read(0); // Get the numer of used spaces, position 0 stores the number of ID cards
-    int start = ( num * 4 ) + 6; // Figure out where the next slot starts
-    num++; // Increment the counter by one
-    EEPROM.write( 0, num ); // Write the new count to the counter
-    for ( int j = 0; j < 4; j++ ) { // Loop 4 times
-      EEPROM.write( start+j, a[j] ); // Write the array values to EEPROM in the right position
-    }
-    successWrite();
-  }
-  else {
+    int start = ( num * 4 ) + 6; // Para saber onde o próximo slot vazio começa
+    num++; // Incrementa a quantidade de cartões
+    EEPROM.write( 0, num ); // Escreve na posição 0 da memória EEPROM a quantidade de cartões atualizada
+    for ( int j = 0; j < 4; j++ ) { // Realiza o loop 4x
+      EEPROM.write( start+j, a[j] ); // Escreve o novo cartão na memória EEPROM, conforme passado para função por meio do array a
+     }
+      successWrite(); // Notificação de que o cartão foi adicionado com sucesso
+     }
+    else {
     failedWrite();
   }
 }
@@ -213,17 +217,17 @@ void writeID( byte a[] ) {
 void deleteID( byte a[] ) {
 
     int num = EEPROM.read(0); // A variável num assume a quantidade de cartões cadastrados
-    int slot; // Figure out the slot number of the card
+    int slot; // Variável que descobre o slot do cartão
     int start;// = ( num * 4 ) + 6; // Descobre onde começa o próximo slot de cada cartão na memória 
     int looping; // O número de loops que o for realiza
-    int j;
+    int j; // Variável usado para o loop
     int count = EEPROM.read(0); // A variável count assume a quantidade de cartões cadastrados
     slot = findIDSLOT( a ); // Descobre o número do slot do cartão a ser deletado
     start = (slot * 4) + 2;
     looping = ((num - slot) * 4);
     num--; // Decrementa - 1 (retirou um cartão)
     EEPROM.write( 0, num ); // Escreve na posição de memória 0 a quantidade de cartões atualizada
-    for ( j = 0; j < looping; j++ ) { // Loop the card shift times
+    for ( j = 0; j < looping; j++ ) { // Loop com a quantidade de cartões
       EEPROM.write( start+j, EEPROM.read(start+4+j)); // Descola os valores do próximo cartão para o cartão deletado
     }
     for ( int k = 0; k < 4; k++ ) { // Agora, apaga o cartão deslocado para que ele não fique duplicado
@@ -237,7 +241,7 @@ boolean checkTwo ( byte a[], byte b[] ) {
   if ( a[0] != NULL ) // Certifica-se que o primeiro array não está vazio
     match = true; // Assume-se que eles são iguais a princípio
   for ( int k = 0; k < 4; k++ ) { // Faz o loop 4x
-    if ( a[k] != b[k] ) // Se um byte não é semelhante na comparação, ele retorna falso
+   if ( a[k] != b[k] ) // Se um byte não é semelhante na comparação, ele retorna falso
       match = false;
   }
   if ( match ) { // Verifica se a variável match ainda é verdadeira, se sim retorna verdadeiro, se não retorna falso
@@ -280,18 +284,12 @@ void successWrite() {
   Serial.println("Cartao UID cadastrado com sucesso da EEPROM");
 }
 
-///////////////////////////////////////// Write Failed to EEPROM   ///////////////////////////////////
-// Flashes the red LED 10 times to indicate a failed write to EEPROM
+///////////////////////////////////////// Escrita Falhou no EEPROM  ///////////////////////////////////
 void failedWrite() {
    
-  for (int i=0; i < 10; i++){
-    digitalWrite(statusLed, HIGH); // Turn on Status Led
-    delay(tempoStatusLed);
-    digitalWrite(statusLed, LOW); // Turn off Status Led
-    delay(tempoStatusLed);
-  }
- 
-  Serial.println("Failed! There is something wrong with ID or bad EEPROM");
+  piscaStatusLed(4,tempoStatusLed,tempoStatusLed/2); // Avisa que a escrita no EEPROM não foi feita corretamente
+  
+  Serial.println("Falha! Existe alguma coisa errada com o cartão ou com a memória EEPROM");
 }
 
 ///////////////////////////////////////// Notificação da remoção do cartão ///////////////////////////////////
@@ -324,7 +322,7 @@ void openDoor( int setDelay ) {
 ///////////////////////////////////////// Acesso Negado  ///////////////////////////////////
 void failed() {
   
-  piscaStatusLed(3,tempoStatusLed,tempoStatusLed/2); // Avisa que o processo falhou atraves do led
+  piscaStatusLed(3,tempoStatusLed,tempoStatusLed/2); // Avisa que o acesso foi negado por meio do Led
  
   delay(tempoDelayCiclo);
   
@@ -341,4 +339,19 @@ void piscaStatusLed(int numero, int tempoLigado, int tempoDesligado) {
      delay(tempoDesligado);
   }
   
+}
+
+///////////////////////////////////////// Controle do Servo-Motor  ///////////////////////////////////
+
+void servoControl()
+{
+  servol.attach(2); // O controle do servo motor será feito pelo pino 2
+  
+  // Dá uma volta de 360º
+  servol.write(0);
+  delay(1000);
+  servol.write(360);
+  delay(1000);
+  servol.write(0);
+  delay(1000);
 }
