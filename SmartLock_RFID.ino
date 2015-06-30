@@ -102,6 +102,12 @@ void setup() {
 ///////////////////////////////////////// Loop Principal ///////////////////////////////////
 void loop () {
   do {
+    char c = Serial.read();  // Lê o que é enviado do celular para o bluetooth
+    if (c == 'l') {     // Se o usuário enviar o comando l no celular
+    openDoor(tempoAbertura); // Abre a porta acionado pelo relé
+    servoControl(); // Aciona o servo motor
+    }
+  
     successRead = getID(); // Altera a variável successRead para 1 quando a leitura for válida, caso contrário assume 0
     if (programMode) {
     }
@@ -347,11 +353,9 @@ void servoControl()
 {
   servol.attach(2); // O controle do servo motor será feito pelo pino 2
   
-  // Dá uma volta de 360º
-  servol.write(0);
-  delay(1000);
-  servol.write(360);
-  delay(1000);
-  servol.write(0);
-  delay(1000);
+  int i;
+  for(i=0;i<180;i++) { // da volta de 180º
+  servol.write(i);
+  delay(50);
 }
+  }
