@@ -15,7 +15,7 @@ Servo servol; // Define a variável do servo motor
 int successRead; // Declara a variável sucessRead, para informar se houve sucesso na leitura do cartão
 
 // Os cartões possuem 4 bytes
-byte storedCard[4];   // Declara a variável storedCard, armazena o cartão ID lido na memória EEPROM
+byte storedCard[5];   // Declara a variável storedCard, armazena o cartão ID lido na memória EEPROM
 byte readCard[4];     // Declara a variável readCard, que armazena  o cartão ID escaneado no módulo RFID-RC522
 byte masterCard[4];   // Declara a variável byte masterCard, que armazena o cartão ID MASTER lido na memória EEPROM
 
@@ -155,7 +155,11 @@ void loop () {
     }
     else {
       if ( findID(readCard) ) {        // Libera acesso ao usuario, caso o cartao esteja cadastrado
+        int y = findOpeningTimes(readCard); // A variável y assume a quantidade de vezes que o cartão acionou a fechadura
         Serial.println("Bem-Vindo!");
+        Serial.println("Este cartao acionou a fechadura ");
+        Serial.print(y);
+        Serial.println(" vez(es)");
         openDoor(tempoAbertura);                // Abre a porta
         servoControl(); // Aciona o servo motor
       }
@@ -196,7 +200,7 @@ void normalModeOn () {
 
 //////////////////////////////////////// Lê o cartão UID da memória EEPROM //////////////////////////////
 void readID( int number ) {
-  int start = (number * 4 ) + 2; // Descobre qual posição está o cartão
+  int start = (number * 5 ) + 1; // Descobre qual posição está o cartão
   for ( int i = 0; i < 4; i++ ) { // Realiza o loop 4x para pegar os 4 byte do cartão
     storedCard[i] = EEPROM.read(start+i); // Armazena o valor lido na variável storedCard
   }
@@ -205,13 +209,14 @@ void readID( int number ) {
 ///////////////////////////////////////// Adiciona cartão UID na memória EEPROM //////////////////////////////////
 void writeID( byte a[] ) {
     if ( !findID( a ) ) { // Verifica se já existe este cartão na memória
-    int num = EEPROM.read(0); // Get the numer of used spaces, position 0 stores the number of ID cards
-    int start = ( num * 4 ) + 6; // Para saber onde o próximo slot vazio começa
+    int num = EEPROM.read(0); // A variável num assume a quantidade de cartões cadastrados
+    int start = ( num * 5 ) + 6; // Para saber onde o próximo slot vazio começa
     num++; // Incrementa a quantidade de cartões
     EEPROM.write( 0, num ); // Escreve na posição 0 da memória EEPROM a quantidade de cartões atualizada
     for ( int j = 0; j < 4; j++ ) { // Realiza o loop 4x
       EEPROM.write( start+j, a[j] ); // Escreve o novo cartão na memória EEPROM, conforme passado para função por meio do array a
      }
+      EEPROM.write( start+4, 0 ); // Zera a contagem de quantas vezes o cartão realizou a abertura
       successWrite(); // Notificação de que o cartão foi adicionado com sucesso
      }
     else {
@@ -224,19 +229,19 @@ void deleteID( byte a[] ) {
 
     int num = EEPROM.read(0); // A variável num assume a quantidade de cartões cadastrados
     int slot; // Variável que descobre o slot do cartão
-    int start;// = ( num * 4 ) + 6; // Descobre onde começa o próximo slot de cada cartão na memória 
+    int start;// Descobre onde começa o próximo slot de cada cartão na memória 
     int looping; // O número de loops que o for realiza
     int j; // Variável usado para o loop
     int count = EEPROM.read(0); // A variável count assume a quantidade de cartões cadastrados
     slot = findIDSLOT( a ); // Descobre o número do slot do cartão a ser deletado
-    start = (slot * 4) + 2;
-    looping = ((num - slot) * 4);
+    start = (slot * 5) + 1;
+    looping = ((num - slot) * 5);
     num--; // Decrementa - 1 (retirou um cartão)
     EEPROM.write( 0, num ); // Escreve na posição de memória 0 a quantidade de cartões atualizada
     for ( j = 0; j < looping; j++ ) { // Loop com a quantidade de cartões
-      EEPROM.write( start+j, EEPROM.read(start+4+j)); // Descola os valores do próximo cartão para o cartão deletado
+      EEPROM.write( start+j, EEPROM.read(start+5+j)); // Descola os valores do próximo cartão para o cartão deletado
     }
-    for ( int k = 0; k < 4; k++ ) { // Agora, apaga o cartão deslocado para que ele não fique duplicado
+    for ( int k = 0; k < 5; k++ ) { // Agora, apaga o cartão deslocado para que ele não fique duplicado
       EEPROM.write( start+j+k, 0);
     }
     successDelete();
@@ -258,7 +263,7 @@ boolean checkTwo ( byte a[], byte b[] ) {
   }
 }
 
-///////////////////////////////////////// Encontrar SLOT  ///////////////////////////////////
+///////////////////////////////////////// Encontra SLOT  ///////////////////////////////////
 int findIDSLOT( byte find[] ) {
   int count = EEPROM.read(0); // Conta a quantidade de cartões cadastrados
   for ( int i = 1; i <= count; i++ ) { // Loop  até a quantidade de cartões
@@ -270,7 +275,7 @@ int findIDSLOT( byte find[] ) {
   }
 }
 
-///////////////////////////////////////// Encontrar cartão UID na memória EEPROM   ///////////////////////////////////
+///////////////////////////////////////// Encontra cartão UID na memória EEPROM   ///////////////////////////////////
 boolean findID( byte find[] ) {
   int count = EEPROM.read(0); // Conta quantos cartões estão cadastrados
   for ( int i = 1; i <= count; i++ ) {  // Entra no loop, sendo o limite a quantidade de cartões previamente cadastrados
@@ -354,8 +359,21 @@ void servoControl()
   servol.attach(2); // O controle do servo motor será feito pelo pino 2
   
   int i;
-  for(i=0;i<180;i++) { // da volta de 180º
+  
+  for(i=050;i<180;i++) { // da volta de 180º
   servol.write(i);
-  delay(50);
+  //delay(15);
 }
+  }
+  
+///////////////////////////////////////// Encontrar a quantidade de vezes que o cartão liberou acesso  ///////////////////////////////////
+
+int findOpeningTimes( byte a[] ) {
+
+    int aux = findIDSLOT (a); // Procura o slot do cartão rastreado
+    int start = ( aux * 5 ) + 5; // Para saber onde está o slot que armazena a contagem
+    int x = EEPROM.read(start); // A variável x assume a contagem inicial
+    x = x + 1; // Soma a contagem toda vez que o usuário abre a fechadura
+    EEPROM.write( start , x ); // Escreve na EEPROM a nova contagem
+    return x;
   }
