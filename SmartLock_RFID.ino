@@ -1,3 +1,6 @@
+
+#include "LowPower.h"
+
 #include <EEPROM.h>  // Biblioteca de memória NÃO-VOLÁTIL para ler/armazenar/deletar IDs
 #include <SPI.h>      // Biblioteca do protocolo SPI (Interface Periférica Serial) para o controlador comunicar com dispositivos periféricos (no caso, o RFID-RC522)
 #include <MFRC522.h>   // Biblioteca para o dispositivo RFID-RC522
@@ -6,6 +9,8 @@
 #define statusLed 6 // Define o pino 6 como status do programa por meio de um Led
 #define relay 8 // Define o pino 8 como acionamento do relé
 #define wipeB 3 // Define o pino 3 como botão de reset
+
+period_t SLEEP_5S;
 
 boolean match = false; // Inicializa a variável match (comparação) como falso
 boolean programMode = false; // Inicializa a variável programMode (Modo de Programação do Cartão Master) como falso
@@ -50,6 +55,7 @@ void setup() {
     Serial.println("!!! Botao Reset de Memoria Pressionado !!!");
     Serial.println("Voce tem 5 segundos para cancelar");
     Serial.println("Esta acao ira remover todos os registros e nao pode ser desfeita");
+    //LowPower.powerDown(SLEEP_1S, ADC_OFF, BOD_OFF);
     delay(5000);    // Dá ao usuário tempo suficiente para cancelar a operação (5s)
     if (digitalRead(wipeB) == LOW) {  // Se o botão continua pressionado, limpar EEPROM
       Serial.println("!!! Limpando memoria EEPROM !!!");
@@ -62,7 +68,7 @@ void setup() {
       }
       Serial.println("!!! Memoria Apagada !!!");
       
-    piscaStatusLed(20, tempoStatusLed/10, tempoStatusLed/10);
+    //piscaStatusLed(20, tempoStatusLed/10, tempoStatusLed/10);
     
     }
     else {
@@ -345,9 +351,9 @@ void piscaStatusLed(int numero, int tempoLigado, int tempoDesligado) {
 
   for (int i=0; i < numero; i++){
     digitalWrite(statusLed, HIGH); // Acende o Led
-     delay(tempoLigado);
+    LowPower.powerDown(SLEEP_1S, ADC_OFF, BOD_OFF);
      digitalWrite(statusLed, LOW); // Apaga o Led
-     delay(tempoDesligado);
+     LowPower.powerDown(SLEEP_1S, ADC_OFF, BOD_OFF);
   }
   
 }
